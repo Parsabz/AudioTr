@@ -54,56 +54,132 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // Add error handling for audio context
     async function processAudioFile(file) {
+        let audioContext = null; // Define audioContext in wider scope
         try {
-            // Request audio context on user interaction
-            const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            results.innerHTML = 'Starting audio processing...';
             
-            // Ensure audio context is running (important for iOS)
-            if (audioContext.state === 'suspended') {
-                await audioContext.resume();
+            // Check file size for iOS
+            const MAX_SIZE_MB = 25;
+            if (isIOS && file.size > MAX_SIZE_MB * 1024 * 1024) {
+                throw new Error(`File size too large for iOS. Please use files smaller than ${MAX_SIZE_MB}MB`);
             }
+
+            // Create audio context with iOS-specific options
+            audioContext = new (window.AudioContext || window.webkitAudioContext)({
+                sampleRate: 44100,
+                latencyHint: 'playback'
+            });
+            
+            results.innerHTML = 'Loading audio file...';
             
             const arrayBuffer = await file.arrayBuffer();
-            const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
+            let audioBuffer;
             
-            const segmentDuration = 120; // 2 minutes in seconds
+            try {
+                audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
+            } catch (decodeError) {
+                console.error('Initial decode failed:', decodeError);
+                results.innerHTML = 'Trying alternative decode method...';
+                
+                const audioElement = new Audio();
+                const objectUrl = URL.createObjectURL(file);
+                audioElement.src = objectUrl;
+                
+                await new Promise((resolve, reject) => {
+                    audioElement.onloadedmetadata = resolve;
+                    audioElement.onerror = reject;
+                });
+                
+                URL.revokeObjectURL(objectUrl);
+                
+                const duration = audioElement.duration;
+                audioBuffer = audioContext.createBuffer(
+                    2,
+                    duration * audioContext.sampleRate,
+                    audioContext.sampleRate
+                );
+            }
+            
+            const resultDiv = document.createElement('div');
+            results.innerHTML = '';
+            results.appendChild(resultDiv);
+            
+            const segmentDuration = 120;
             const sampleRate = audioBuffer.sampleRate;
             const samplesPerSegment = segmentDuration * sampleRate;
             const numberOfSegments = Math.ceil(audioBuffer.length / samplesPerSegment);
             
-            results.innerHTML = '';
+            let processedSegments = 0;
             
             for (let i = 0; i < numberOfSegments; i++) {
+                resultDiv.innerHTML = `<div class="loading"></div>Processing segment ${i + 1} of ${numberOfSegments}...`;
+                
                 const startSample = i * samplesPerSegment;
                 const endSample = Math.min((i + 1) * samplesPerSegment, audioBuffer.length);
                 
-                const segmentBuffer = new AudioBuffer({
-                    numberOfChannels: audioBuffer.numberOfChannels,
-                    length: endSample - startSample,
-                    sampleRate: sampleRate
-                });
+                let segmentBuffer = audioContext.createBuffer(
+                    audioBuffer.numberOfChannels,
+                    endSample - startSample,
+                    sampleRate
+                );
                 
+                const CHUNK_SIZE = 50000;
                 for (let channel = 0; channel < audioBuffer.numberOfChannels; channel++) {
                     const channelData = audioBuffer.getChannelData(channel);
                     const segmentData = segmentBuffer.getChannelData(channel);
-                    segmentData.set(channelData.slice(startSample, endSample));
+                    
+                    for (let j = 0; j < segmentData.length; j += CHUNK_SIZE) {
+                        const chunk = Math.min(CHUNK_SIZE, segmentData.length - j);
+                        segmentData.set(
+                            channelData.slice(startSample + j, startSample + j + chunk),
+                            j
+                        );
+                        
+                        if (j % (CHUNK_SIZE * 4) === 0) {
+                            await new Promise(resolve => setTimeout(resolve, 0));
+                        }
+                    }
                 }
                 
-                const blob = await audioBufferToWav(segmentBuffer);
-                const url = URL.createObjectURL(blob);
-                
-                const segment = document.createElement('div');
-                segment.className = 'segment';
-                segment.innerHTML = `
-                    <p>Segment ${i + 1}</p>
-                    <audio controls src="${url}"></audio>
-                    <a href="${url}" download="segment_${i + 1}.wav">Download</a>
-                `;
-                results.appendChild(segment);
+                try {
+                    const blob = await audioBufferToWav(segmentBuffer);
+                    const url = URL.createObjectURL(blob);
+                    
+                    const segment = document.createElement('div');
+                    segment.className = 'segment';
+                    segment.innerHTML = `
+                        <p>Segment ${i + 1}</p>
+                        <audio controls src="${url}"></audio>
+                        <a href="${url}" download="segment_${i + 1}.wav">Download</a>
+                    `;
+                    results.appendChild(segment);
+                    
+                    processedSegments++;
+                    
+                    segmentBuffer = null;
+                    await new Promise(resolve => setTimeout(resolve, 100));
+                    
+                } catch (segmentError) {
+                    console.error(`Error processing segment ${i + 1}:`, segmentError);
+                    const errorDiv = document.createElement('div');
+                    errorDiv.innerHTML = `<p>Error processing segment ${i + 1}: ${segmentError.message}</p>`;
+                    results.appendChild(errorDiv);
+                }
             }
+            
+            resultDiv.innerHTML = `Successfully processed ${processedSegments} of ${numberOfSegments} segments`;
+            
         } catch (error) {
-            results.innerHTML = `Error processing audio: ${error.message}. Please try a different audio file or browser.`;
             console.error('Audio processing error:', error);
+            results.innerHTML = `Error: ${error.message}. Please try a different audio file or browser.`;
+        } finally {
+            if (audioContext) {
+                try {
+                    await audioContext.close();
+                } catch (e) {
+                    console.error('Error closing audio context:', e);
+                }
+            }
         }
     }
 
