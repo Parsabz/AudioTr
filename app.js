@@ -8,58 +8,61 @@ document.addEventListener('DOMContentLoaded', () => {
     
     if (isIOS) {
         // Modify dropzone text for iOS users
-        dropZone.querySelector('p').textContent = 'Tap to select or record audio (MP3, M4A, WAV)';
+        dropZone.querySelector('p').textContent = 'Tap here to select audio file';
+        dropZone.style.position = 'relative'; // Ensure proper positioning
         
-        // Disable drag and drop for iOS
-        dropZone.addEventListener('touchstart', (e) => {
-            e.preventDefault();
+        // Remove drag and drop for iOS
+        ['dragover', 'dragleave', 'drop'].forEach(eventName => {
+            dropZone.removeEventListener(eventName, e => e.preventDefault());
+        });
+
+        const iosButton = document.getElementById('iosButton');
+        iosButton.style.display = 'block';
+        iosButton.addEventListener('click', () => {
             fileInput.click();
         });
     }
 
-    // Handle drag and drop
-    dropZone.addEventListener('dragover', (e) => {
-        e.preventDefault();
-        dropZone.style.backgroundColor = '#f5f5f5';
-    });
-
-    dropZone.addEventListener('dragleave', (e) => {
-        e.preventDefault();
-        dropZone.style.backgroundColor = '';
-    });
-
-    dropZone.addEventListener('drop', (e) => {
-        e.preventDefault();
-        dropZone.style.backgroundColor = '';
-        const file = e.dataTransfer.files[0];
-        if (file && file.type.startsWith('audio/')) {
-            processAudioFile(file);
-        }
-    });
-
-    // Handle click to upload
-    dropZone.addEventListener('click', () => {
-        fileInput.click();
-    });
-
+    // Handle file selection
     fileInput.addEventListener('change', (e) => {
         const file = e.target.files[0];
         if (file) {
-            // Check if the file type is supported
-            const supportedTypes = ['audio/mpeg', 'audio/mp4', 'audio/wav', 'audio/x-m4a'];
-            if (supportedTypes.includes(file.type)) {
+            const supportedTypes = ['audio/mpeg', 'audio/mp4', 'audio/wav', 'audio/x-m4a', 'audio/m4a'];
+            const fileType = file.type.toLowerCase();
+            
+            // Also check file extension for iOS
+            const fileName = file.name.toLowerCase();
+            const isSupported = supportedTypes.includes(fileType) || 
+                              fileName.endsWith('.mp3') || 
+                              fileName.endsWith('.m4a') || 
+                              fileName.endsWith('.wav');
+            
+            if (isSupported) {
+                results.innerHTML = 'Processing audio file...';
                 processAudioFile(file);
             } else {
-                results.innerHTML = `Error: File type "${file.type}" is not supported. Please use MP3, M4A, or WAV files.`;
+                results.innerHTML = `Error: File type not supported. Please use MP3, M4A, or WAV files.`;
             }
         }
     });
 
+    // Remove click handler as we're using direct input interaction
+    dropZone.removeEventListener('click', () => {});
+
+    // Make the entire drop zone clickable/tappable
+    dropZone.style.cursor = 'pointer';
+    
+    // Add error handling for audio context
     async function processAudioFile(file) {
         try {
-            results.innerHTML = 'Processing audio file...';
-            
+            // Request audio context on user interaction
             const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            
+            // Ensure audio context is running (important for iOS)
+            if (audioContext.state === 'suspended') {
+                await audioContext.resume();
+            }
+            
             const arrayBuffer = await file.arrayBuffer();
             const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
             
@@ -99,7 +102,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 results.appendChild(segment);
             }
         } catch (error) {
-            results.innerHTML = `Error processing audio: ${error.message}`;
+            results.innerHTML = `Error processing audio: ${error.message}. Please try a different audio file or browser.`;
+            console.error('Audio processing error:', error);
         }
     }
 
