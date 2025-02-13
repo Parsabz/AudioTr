@@ -3,6 +3,20 @@ document.addEventListener('DOMContentLoaded', () => {
     const fileInput = document.getElementById('fileInput');
     const results = document.getElementById('results');
 
+    // Add iOS detection
+    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+    
+    if (isIOS) {
+        // Modify dropzone text for iOS users
+        dropZone.querySelector('p').textContent = 'Tap to select or record audio (MP3, M4A, WAV)';
+        
+        // Disable drag and drop for iOS
+        dropZone.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            fileInput.click();
+        });
+    }
+
     // Handle drag and drop
     dropZone.addEventListener('dragover', (e) => {
         e.preventDefault();
@@ -30,8 +44,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
     fileInput.addEventListener('change', (e) => {
         const file = e.target.files[0];
-        if (file && file.type.startsWith('audio/')) {
-            processAudioFile(file);
+        if (file) {
+            // Check if the file type is supported
+            const supportedTypes = ['audio/mpeg', 'audio/mp4', 'audio/wav', 'audio/x-m4a'];
+            if (supportedTypes.includes(file.type)) {
+                processAudioFile(file);
+            } else {
+                results.innerHTML = `Error: File type "${file.type}" is not supported. Please use MP3, M4A, or WAV files.`;
+            }
         }
     });
 
