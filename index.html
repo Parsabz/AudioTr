@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Audio Trimmer</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            text-align: center;
+        }
+        .container {
+            margin-top: 50px;
+        }
+        .drop-zone {
+            border: 2px dashed #ccc;
+            padding: 20px;
+            margin: 20px 0;
+            cursor: pointer;
+        }
+        .drop-zone:hover {
+            background-color: #f5f5f5;
+        }
+        #results {
+            margin-top: 20px;
+            text-align: left;
+        }
+        .segment {
+            margin: 10px 0;
+            padding: 10px;
+            background-color: #f0f0f0;
+            border-radius: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Audio Trimmer for my one and only Love Naxi</h1>
+        <p>Azizam please Upload an audio file to split it into 2-minute segments</p>
+        
+        <div class="drop-zone" id="dropZone">
+            <p>Khoshgele Drop your audio file here or click to select</p>
+            <input type="file" id="fileInput" accept="audio/*" style="display: none;">
+        </div>
+
+        <div id="results"></div>
+    </div>
+    <script src="app.js"></script>
+</body>
+</html> 
